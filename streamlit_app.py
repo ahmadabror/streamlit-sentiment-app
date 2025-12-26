@@ -14,7 +14,7 @@ from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
 import gensim
 from gensim import corpora
-from gensim.models import LdaModel # Import LdaModel specifically
+from gensim.models import LdaMulticore # Import LdaMulticore explicitly
 from sklearn.preprocessing import LabelEncoder
 
 # --- Constants & Global Variables (must be consistent with training) ---
@@ -26,10 +26,10 @@ sentiment_labels_map = {'LABEL_0': 'positive', 'LABEL_1': 'neutral', 'LABEL_2': 
 sentiment_class_names = ['negative', 'neutral', 'positive'] # Ordered as per LabelEncoder fit_transform
 
 topic_name_map = {
-    0: "Kecepatan dan Proses",
-    1: "Urusan Administrasi & Pembayaran",
+    0: "Kecepatan, Proses & Kepuasan",
+    1: "Urusan Online & Pembayaran",
     2: "Layanan POLRI & Apresiasi",
-    3: "Kendala Login & Teknis"
+    3: "Kendala Pendaftaran & Teknis"
 }
 
 # --- Load Assets (Tokenizer, LSTM Model, LDA Model, LabelEncoder) ---
@@ -106,8 +106,8 @@ def load_lda_assets():
     # Load saved LDA Model and Dictionary
     # Ensure these files are present in the same directory
     if os.path.exists('lda_model_4_topics.gensim') and os.path.exists('lda_dictionary.gensim'):
-        # Use LdaModel.load instead of LdaMulticore.load for better compatibility during inference
-        loaded_lda_model = LdaModel.load('lda_model_4_topics.gensim')
+        # Use LdaMulticore.load explicitly
+        loaded_lda_model = LdaMulticore.load('lda_model_4_topics.gensim')
         loaded_lda_dictionary = corpora.Dictionary.load('lda_dictionary.gensim')
     else:
         st.error("LDA Model files not found. Please upload 'lda_model_4_topics.gensim' and 'lda_dictionary.gensim'.")
@@ -180,7 +180,7 @@ if st.button("Analyze Review"):
                 bow_for_topic = lda_dictionary_app.doc2bow(cleaned_lda_text_for_topic.split())
                 
                 if bow_for_topic:
-                    # Using get_document_topics which should now work on the LdaModel object
+                    # Using get_document_topics which should now work on the LdaMulticore object
                     topic_distribution = lda_model_app.get_document_topics(bow_for_topic)
                     if topic_distribution:
                         dominant_topic_id = max(topic_distribution, key=lambda item: item[1])[0]
