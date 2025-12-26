@@ -14,7 +14,7 @@ from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
 import gensim
 from gensim import corpora
-from gensim.models import LdaMulticore, LdaModel # Import LdaMulticore and LdaModel explicitly
+from gensim.models import LdaMulticore # Import LdaMulticore
 from sklearn.preprocessing import LabelEncoder # Import LabelEncoder
 
 # --- Constants & Global Variables (must be consistent with training) ---
@@ -54,7 +54,6 @@ def load_tokenizer_and_model():
 def load_lda_assets():
     # Download NLTK resources
     nltk.download("punkt")
-    nltk.download("punkt_tab")
 
     # =========================
     # STOPWORDS
@@ -107,8 +106,8 @@ def load_lda_assets():
     # Load saved LDA Model and Dictionary
     # Ensure these files are present in the same directory
     if os.path.exists('lda_model_deploy.gensim') and os.path.exists('lda_dictionary.gensim'):
-        # Use LdaModel.load for the deployed model
-        loaded_lda_model = LdaModel.load('lda_model_deploy.gensim')
+        # Use LdaMulticore.load for the deployed model
+        loaded_lda_model = LdaMulticore.load('lda_model_deploy.gensim')
         loaded_lda_dictionary = corpora.Dictionary.load('lda_dictionary.gensim')
     else:
         st.error("LDA Model files not found. Please ensure 'lda_model_deploy.gensim' and 'lda_dictionary.gensim' are available.")
@@ -183,7 +182,6 @@ if st.button("Analyze Review"):
                 bow_for_topic = lda_dictionary_app.doc2bow(cleaned_lda_text_for_topic.split())
 
                 if bow_for_topic:
-                    # Using get_document_topics which should now work on the LdaModel object
                     topic_distribution = lda_model_app.get_document_topics(bow_for_topic)
                     if topic_distribution:
                         dominant_topic_id = max(topic_distribution, key=lambda item: item[1])[0]
