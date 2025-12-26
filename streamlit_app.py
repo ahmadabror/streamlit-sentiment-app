@@ -1,3 +1,4 @@
+%%writefile streamlit_app.py
 
 import streamlit as st
 import pandas as pd
@@ -14,8 +15,7 @@ from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
 import gensim
 from gensim import corpora
-from sklearn.preprocessing import LabelEncoder  
-
+from sklearn.preprocessing import LabelEncoder
 
 # --- Constants & Global Variables (must be consistent with training) ---
 MAX_WORDS = 10000
@@ -67,8 +67,7 @@ def load_lda_assets():
     # =========================
     # STEMMER
     # =========================
-    stemmer_factory = StemmerFactory()
-    stemmer_obj = stemmer_factory.create_stemmer()
+    stemmer_obj = StemmerFactory().create_stemmer()
 
     # =========================
     # NORMALIZATION DICT (as defined in xA94dvHYbQzG)
@@ -97,39 +96,14 @@ def load_lda_assets():
         'tilang':'tilang','e-tilang':'tilang','etilang':'tilang','surat kehilangan':'kehilangan'
     }
 
-    # Load LDA Model (assuming lda_model_4_topics was the final one)
-    # This part requires re-creating the dictionary and corpus used for lda_model_4_topics
-    # We need access to the original 'texts' and dictionary filtering parameters
-    # For a real deployment, save the LDA model and dictionary explicitly
+    # Load saved LDA Model and Dictionary
+    loaded_lda_model = gensim.models.LdaMulticore.load('lda_model_4_topics.gensim')
+    loaded_lda_dictionary = corpora.Dictionary.load('lda_dictionary.gensim')
     
-    # To approximate: create a dummy dictionary and corpus with the same filtering applied
-    # For accurate reproduction, the dictionary and model should be saved and loaded.
-    # As an alternative, we will re-generate a 'mock' dictionary using pre-loaded texts. 
-    # In a real scenario, you would save and load dictionary.gensim and lda_model.gensim
-
-    # We don't have df_lda here, so we need a placeholder to reconstruct the dictionary. 
-    # This is a limitation if the full dictionary/corpus isn't saved.
-    # For a proper deployment, the dictionary and lda_model itself should be saved (e.g., using gensim.corpora.Dictionary.save and gensim.models.LdaMulticore.save)
-    st.warning("LDA model and dictionary not explicitly saved/loaded. Topic prediction will be based on a re-initialized dictionary which might differ slightly if not built from original texts.")
-
-    # Minimalistic approach: just load the lda model if it was saved as a whole
-    # Since the notebook saved it to a variable 'lda_model_4_topics' but not to disk,
-    # we need to simulate its creation. This part would be `gensim.models.LdaMulticore.load('lda_model_4_topics.gensim')`
-    # and `gensim.corpora.Dictionary.load('dictionary.gensim')` in a real app.
-    # For now, let's assume `lda_model_4_topics` and `dictionary` are available from the colab env for this `%%writefile` context if run directly after training
-    
-    # --- Re-using global variables from Colab environment if they exist ---
-    # In a standalone Streamlit app, you would load these from saved files.
-    # For example: lda_model = gensim.models.LdaMulticore.load('lda_model_4_topics')
-    #               dictionary = corpora.Dictionary.load('lda_dictionary')
-
-    # --- For this demo, let's just make sure required globals are passed/recreated ---
-    # This assumes `lda_model_4_topics` and `dictionary` are accessible after `%%writefile` is executed
-    # If running this as a separate file, you MUST save and load the LDA model and dictionary.
-    return stemmer_obj, stop_words_set, normalization_dict_app
+    return stemmer_obj, stop_words_set, normalization_dict_app, loaded_lda_model, loaded_lda_dictionary
 
 tokenizer, model, label_encoder = load_tokenizer_and_model()
-stemmer_obj, stop_words_set, normalization_dict_app = load_lda_assets()
+stemmer_obj, stop_words_set, normalization_dict_app, lda_model_app, lda_dictionary_app = load_lda_assets()
 
 # --- Preprocessing Functions (Consistent with Notebook) ---
 def normalize_repeated_characters(text: str) -> str:
@@ -163,6 +137,12 @@ def preprocess_new_text_for_lstm(text_input, tok, max_seq_len):
     padded_sequence = pad_sequences(sequence, maxlen=max_seq_len)
     return padded_sequence, cleaned_text
 
+# Pre-processing function for new sentences for LDA
+def preprocess_new_text_for_lda(text):
+    cleaned_text = preprocess_text(text)
+    cleaned_lda_text = preprocess_text_lda(cleaned_text)
+    return cleaned_lda_text
+
 # --- Streamlit App Layout ---
 st.set_page_config(layout="wide")
 st.title("Sentiment & Topic Analysis for App Reviews")
@@ -181,35 +161,18 @@ if st.button("Analyze Review"):
             predicted_sentiment = label_encoder.inverse_transform([sentiment_result_encoded])[0]
 
             # --- Topic Prediction (LDA) ---
-            # For a proper Streamlit app, `lda_model_4_topics` and `dictionary` need to be loaded.
-            # Since they are not saved to disk in the notebook, we will use a simplified approach.
-            # For this Streamlit app to work stand-alone, you MUST save your LDA model and dictionary. 
-            # Example: lda_model_4_topics.save('lda_model_4_topics.gensim') 
-            #          dictionary.save('lda_dictionary.gensim')
-            # Then load them here:
-            # loaded_lda_model = gensim.models.LdaMulticore.load('lda_model_4_topics.gensim')
-            # loaded_lda_dictionary = corpora.Dictionary.load('lda_dictionary.gensim')
-
-            # For now, we'll try to reconstruct the dictionary from original df_lda if possible, or give a warning.
-            # THIS PART IS A SIMPLIFICATION. For robust deployment, save/load LDA assets.
-            try:
-                # This requires 'df_lda' and its 'cleaned_content_lda' to be available which is not typical for a standalone script
-                # Recreating from scratch based on pre-processing functions here
-                texts_for_dict = [preprocess_text_lda(r) for r in df['cleaned_content']] # Assuming df is available or loaded
-                temp_dictionary = corpora.Dictionary([t.split() for t in texts_for_dict])
-                temp_dictionary.filter_extremes(no_below=30, no_above=0.7) # Consistent with 4-topic model
-                
-                cleaned_lda_text_for_topic = preprocess_text_lda(user_input)
-                bow_for_topic = temp_dictionary.doc2bow(cleaned_lda_text_for_topic.split())
-
-                # This also requires the actual LDA model object (lda_model_4_topics) to be available.
-                # Since it's not saved and loaded, we can't accurately predict the topic. 
-                # We will output a placeholder for topic prediction.
-                predicted_topic = "(LDA Model and Dictionary need to be saved/loaded for accurate topic prediction in standalone app)"
-
-            except Exception as e:
-                predicted_topic = f"Error in topic prediction setup: {e}"
-                st.warning("Warning: LDA model or dictionary could not be loaded/reconstructed for topic prediction. Please ensure they are saved and loaded correctly in a standalone app.")
+            cleaned_lda_text_for_topic = preprocess_new_text_for_lda(user_input)
+            bow_for_topic = lda_dictionary_app.doc2bow(cleaned_lda_text_for_topic.split())
+            
+            if bow_for_topic:
+                topic_distribution = lda_model_app.get_document_topics(bow_for_topic)
+                if topic_distribution:
+                    dominant_topic_id = max(topic_distribution, key=lambda item: item[1])[0]
+                    predicted_topic = topic_name_map.get(dominant_topic_id, f"Unknown Topic {dominant_topic_id}")
+                else:
+                    predicted_topic = "No dominant topic found for this text after LDA processing."
+            else:
+                predicted_topic = "No relevant words for topic modeling after preprocessing."
 
             st.subheader("Analysis Results:")
             st.write(f"**Cleaned Review (for LSTM):** {cleaned_for_sentiment}")
