@@ -14,6 +14,8 @@ from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
 import gensim
 from gensim import corpora
+from sklearn.preprocessing import LabelEncoder  
+
 
 # --- Constants & Global Variables (must be consistent with training) ---
 MAX_WORDS = 10000
