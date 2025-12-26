@@ -53,7 +53,7 @@ def load_lda_assets():
     # This part should ideally be loaded from saved files if they were custom/dynamic
     # For simplicity, re-defining as they were in the notebook
     nltk.download("punkt")
-    nltk.download("punkt_tab") # Add this line to download punkt_tab
+    nltk.download("punkt_tab")
 
     # =========================
     # STOPWORDS (as defined in xA94dvHYbQzG then 77c3e133)
@@ -104,23 +104,24 @@ def load_lda_assets():
 tokenizer, model, label_encoder = load_tokenizer_and_model()
 stemmer_obj, stop_words_set, normalization_dict_app, lda_model_app, lda_dictionary_app = load_lda_assets()
 
-# --- Preprocessing Functions (Consistent with Notebook) ---
+# --- Preprocessing Functions (Corrected Regex) ---
 def normalize_repeated_characters(text: str) -> str:
-    return re.sub(r"(.)\\1{2,}", r"\\1", text)
+    return re.sub(r"(.)\1{2,}", r"\1", text)
 
 def preprocess_text(text: str) -> str:
     text = str(text)
     text = normalize_repeated_characters(text)
     text = emoji.demojize(text)
+    # Removed extra backslashes for standard python string regex
     text = re.sub(r":[a-z_]+:", " ", text)
-    text = re.sub(r"http\\S+|www\\S+|https\\S+", " ", text)
-    text = re.sub(r"\\@\\w+|#", " ", text)
-    text = re.sub(r"\\d+", " ", text)
-    text = re.sub(r"[^\\w\\s]+", " ", text)
+    text = re.sub(r"http\S+|www\S+|https\S+", " ", text)
+    text = re.sub(r"\@\w+|#", " ", text)
+    text = re.sub(r"\d+", " ", text)
+    text = re.sub(r"[^\w\s]+", " ", text)
     text = text.lower()
     for slang, standard in normalization_dict_app.items():
-        text = re.sub(rf"\\b{re.escape(slang.lower())}\\b", standard.lower(), text)
-    text = re.sub(r"\\s+", " ", text).strip()
+        text = re.sub(rf"\b{re.escape(slang.lower())}\b", standard.lower(), text)
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 def preprocess_text_lda(text: str) -> str:
