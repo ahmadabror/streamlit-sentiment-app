@@ -7,6 +7,7 @@ from tensorflow.keras.preprocessing.text import tokenizer_from_json
 import json
 import re
 import emoji
+import os
 import nltk
 from nltk.tokenize import word_tokenize
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
@@ -49,27 +50,33 @@ def load_tokenizer_and_model():
 
 @st.cache_resource
 def load_lda_assets():
-    # Reconstruct stopwords, stemmer, and normalization_dict for LDA preprocessing
-    # This part should ideally be loaded from saved files if they were custom/dynamic
-    # For simplicity, re-defining as they were in the notebook
+    # Download NLTK resources
     nltk.download("punkt")
     nltk.download("punkt_tab")
 
     # =========================
-    # STOPWORDS (as defined in xA94dvHYbQzG then 77c3e133)
+    # STOPWORDS
     # =========================
     stop_factory = StopWordRemoverFactory()
     more_stopword = ['dengan', 'ia', 'bahwa', 'oleh', 'nya', 'dana', 'aplikasi', 'sangat', 'mudah', 'bantu', 'bagus', 'skck']
     stop_words_set = set(stop_factory.get_stop_words())
     stop_words_set.update(more_stopword)
 
+    # Try to load additional stopwords from file if it exists (for sync with notebook)
+    if os.path.exists("stopwordbahasa.txt"):
+        with open("stopwordbahasa.txt", "r", encoding="utf-8") as f:
+            additional_stopwords = [line.strip() for line in f.readlines()]
+            additional_stopwords = [sw for sw in additional_stopwords if sw]
+            stop_words_set.update(additional_stopwords)
+
     # =========================
     # STEMMER
     # =========================
-    stemmer_obj = StemmerFactory().create_stemmer()
+    stemmer_factory = StemmerFactory()
+    stemmer_obj = stemmer_factory.create_stemmer()
 
     # =========================
-    # NORMALIZATION DICT (as defined in xA94dvHYbQzG)
+    # NORMALIZATION DICT
     # =========================
     normalization_dict_app = {
         'ae': 'saja','aja': 'saja','ajah': 'saja','aj': 'saja','jha': 'saja','sj': 'saja',
@@ -96,15 +103,21 @@ def load_lda_assets():
     }
 
     # Load saved LDA Model and Dictionary
-    loaded_lda_model = gensim.models.LdaMulticore.load('lda_model_4_topics.gensim')
-    loaded_lda_dictionary = corpora.Dictionary.load('lda_dictionary.gensim')
+    # Ensure these files are present in the same directory
+    if os.path.exists('lda_model_4_topics.gensim') and os.path.exists('lda_dictionary.gensim'):
+        loaded_lda_model = gensim.models.LdaMulticore.load('lda_model_4_topics.gensim')
+        loaded_lda_dictionary = corpora.Dictionary.load('lda_dictionary.gensim')
+    else:
+        st.error("LDA Model files not found. Please upload 'lda_model_4_topics.gensim' and 'lda_dictionary.gensim'.")
+        loaded_lda_model = None
+        loaded_lda_dictionary = None
     
     return stemmer_obj, stop_words_set, normalization_dict_app, loaded_lda_model, loaded_lda_dictionary
 
 tokenizer, model, label_encoder = load_tokenizer_and_model()
 stemmer_obj, stop_words_set, normalization_dict_app, lda_model_app, lda_dictionary_app = load_lda_assets()
 
-# --- Preprocessing Functions (Corrected Regex) ---
+# --- Preprocessing Functions (Fixed Regex) ---
 def normalize_repeated_characters(text: str) -> str:
     return re.sub(r"(.)\1{2,}", r"\1", text)
 
@@ -112,7 +125,6 @@ def preprocess_text(text: str) -> str:
     text = str(text)
     text = normalize_repeated_characters(text)
     text = emoji.demojize(text)
-    # Removed extra backslashes for standard python string regex
     text = re.sub(r":[a-z_]+:", " ", text)
     text = re.sub(r"http\S+|www\S+|https\S+", " ", text)
     text = re.sub(r"\@\w+|#", " ", text)
@@ -161,18 +173,21 @@ if st.button("Analyze Review"):
             predicted_sentiment = label_encoder.inverse_transform([sentiment_result_encoded])[0]
 
             # --- Topic Prediction (LDA) ---
-            cleaned_lda_text_for_topic = preprocess_new_text_for_lda(user_input)
-            bow_for_topic = lda_dictionary_app.doc2bow(cleaned_lda_text_for_topic.split())
-            
-            if bow_for_topic:
-                topic_distribution = lda_model_app.get_document_topics(bow_for_topic)
-                if topic_distribution:
-                    dominant_topic_id = max(topic_distribution, key=lambda item: item[1])[0]
-                    predicted_topic = topic_name_map.get(dominant_topic_id, f"Unknown Topic {dominant_topic_id}")
+            if lda_dictionary_app and lda_model_app:
+                cleaned_lda_text_for_topic = preprocess_new_text_for_lda(user_input)
+                bow_for_topic = lda_dictionary_app.doc2bow(cleaned_lda_text_for_topic.split())
+                
+                if bow_for_topic:
+                    topic_distribution = lda_model_app.get_document_topics(bow_for_topic)
+                    if topic_distribution:
+                        dominant_topic_id = max(topic_distribution, key=lambda item: item[1])[0]
+                        predicted_topic = topic_name_map.get(dominant_topic_id, f"Unknown Topic {dominant_topic_id}")
+                    else:
+                        predicted_topic = "No dominant topic found for this text after LDA processing."
                 else:
-                    predicted_topic = "No dominant topic found for this text after LDA processing."
+                    predicted_topic = "No relevant words for topic modeling after preprocessing."
             else:
-                predicted_topic = "No relevant words for topic modeling after preprocessing."
+                predicted_topic = "LDA Model not loaded."
 
             st.subheader("Analysis Results:")
             st.write(f"**Cleaned Review (for LSTM):** {cleaned_for_sentiment}")
