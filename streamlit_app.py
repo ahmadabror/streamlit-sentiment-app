@@ -14,8 +14,8 @@ from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
 import gensim
 from gensim import corpora
-from gensim.models import LdaMulticore # Import LdaMulticore explicitly
-from sklearn.preprocessing import LabelEncoder
+from gensim.models import LdaMulticore, LdaModel # Import LdaMulticore and LdaModel explicitly
+from sklearn.preprocessing import LabelEncoder # Import LabelEncoder
 
 # --- Constants & Global Variables (must be consistent with training) ---
 MAX_WORDS = 10000
@@ -32,7 +32,7 @@ topic_name_map = {
     3: "Kendala Pendaftaran & Teknis"
 }
 
-# --- Load Assets (Tokenizer, LSTM Model, LDA Model, LabelEncoder) ---
+# --- Load Assets (Tokenizer, LSTM Model, LabelEncoder) ---
 @st.cache_resource
 def load_tokenizer_and_model():
     # Load Tokenizer
@@ -49,6 +49,7 @@ def load_tokenizer_and_model():
 
     return loaded_tokenizer, loaded_model, le
 
+# --- Load LDA Assets ---
 @st.cache_resource
 def load_lda_assets():
     # Download NLTK resources
@@ -67,7 +68,7 @@ def load_lda_assets():
     if os.path.exists("stopwordbahasa.txt"):
         with open("stopwordbahasa.txt", "r", encoding="utf-8") as f:
             additional_stopwords = [line.strip() for line in f.readlines()]
-            additional_stopwords = [sw for sw in additional_stopwords if sw]
+            additional_stopwords = [sw for sw in additional_stopwords if sw] # remove empty
             stop_words_set.update(additional_stopwords)
 
     # =========================
@@ -105,15 +106,15 @@ def load_lda_assets():
 
     # Load saved LDA Model and Dictionary
     # Ensure these files are present in the same directory
-    if os.path.exists('lda_model_4_topics.gensim') and os.path.exists('lda_dictionary.gensim'):
-        # Use LdaMulticore.load explicitly
-        loaded_lda_model = LdaMulticore.load('lda_model_4_topics.gensim')
+    if os.path.exists('lda_model_deploy.gensim') and os.path.exists('lda_dictionary.gensim'):
+        # Use LdaModel.load for the deployed model
+        loaded_lda_model = LdaModel.load('lda_model_deploy.gensim')
         loaded_lda_dictionary = corpora.Dictionary.load('lda_dictionary.gensim')
     else:
-        st.error("LDA Model files not found. Please upload 'lda_model_4_topics.gensim' and 'lda_dictionary.gensim'.")
+        st.error("LDA Model files not found. Please ensure 'lda_model_deploy.gensim' and 'lda_dictionary.gensim' are available.")
         loaded_lda_model = None
         loaded_lda_dictionary = None
-    
+
     return stemmer_obj, stop_words_set, normalization_dict_app, loaded_lda_model, loaded_lda_dictionary
 
 tokenizer, model, label_encoder = load_tokenizer_and_model()
@@ -121,24 +122,26 @@ stemmer_obj, stop_words_set, normalization_dict_app, lda_model_app, lda_dictiona
 
 # --- Preprocessing Functions (Fixed Regex) ---
 def normalize_repeated_characters(text: str) -> str:
-    return re.sub(r"(.)\1{2,}", r"\1", text)
+    return re.sub(r"(.)\\1{2,}", r"\\1", text)
 
 def preprocess_text(text: str) -> str:
+    # Using the normalization_dict and steps defined earlier in xA94dvHYbQzG
     text = str(text)
     text = normalize_repeated_characters(text)
     text = emoji.demojize(text)
     text = re.sub(r":[a-z_]+:", " ", text)
-    text = re.sub(r"http\S+|www\S+|https\S+", " ", text)
-    text = re.sub(r"\@\w+|#", " ", text)
-    text = re.sub(r"\d+", " ", text)
-    text = re.sub(r"[^\w\s]+", " ", text)
+    text = re.sub(r"http\\S+|www\\S+|https\\S+", " ", text)
+    text = re.sub(r"\\@\\w+|#", " ", text)
+    text = re.sub(r"\\d+", " ", text)
+    text = re.sub(r"[^\\w\\s]+", " ", text)
     text = text.lower()
     for slang, standard in normalization_dict_app.items():
-        text = re.sub(rf"\b{re.escape(slang.lower())}\b", standard.lower(), text)
-    text = re.sub(r"\s+", " ", text).strip()
+        text = re.sub(rf"\\b{re.escape(slang.lower())}\\b", standard.lower(), text)
+    text = re.sub(r"\\s+", " ", text).strip()
     return text
 
 def preprocess_text_lda(text: str) -> str:
+    # Using stemmer and stop_words defined earlier in xA94dvHYbQzG
     t = stemmer_obj.stem(text)
     tokens = word_tokenize(t)
     tokens = [w for w in tokens if w not in stop_words_set and len(w) > 2]
@@ -169,7 +172,7 @@ if st.button("Analyze Review"):
         with st.spinner("Analyzing..."):
             # --- Sentiment Prediction (LSTM) ---
             padded_text_for_sentiment, cleaned_for_sentiment = preprocess_new_text_for_lstm(user_input, tokenizer, MAX_SEQUENCE_LENGTH)
-            
+
             sentiment_pred_probs = model.predict(padded_text_for_sentiment)
             sentiment_result_encoded = np.argmax(sentiment_pred_probs, axis=1)[0]
             predicted_sentiment = label_encoder.inverse_transform([sentiment_result_encoded])[0]
@@ -178,9 +181,9 @@ if st.button("Analyze Review"):
             if lda_dictionary_app and lda_model_app:
                 cleaned_lda_text_for_topic = preprocess_new_text_for_lda(user_input)
                 bow_for_topic = lda_dictionary_app.doc2bow(cleaned_lda_text_for_topic.split())
-                
+
                 if bow_for_topic:
-                    # Using get_document_topics which should now work on the LdaMulticore object
+                    # Using get_document_topics which should now work on the LdaModel object
                     topic_distribution = lda_model_app.get_document_topics(bow_for_topic)
                     if topic_distribution:
                         dominant_topic_id = max(topic_distribution, key=lambda item: item[1])[0]
