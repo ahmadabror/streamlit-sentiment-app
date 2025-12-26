@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -54,6 +53,7 @@ def load_lda_assets():
     # This part should ideally be loaded from saved files if they were custom/dynamic
     # For simplicity, re-defining as they were in the notebook
     nltk.download("punkt")
+    nltk.download("punkt_tab") # Add this line to download punkt_tab
 
     # =========================
     # STOPWORDS (as defined in xA94dvHYbQzG then 77c3e133)
